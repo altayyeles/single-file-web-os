@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AltayOS - Web Environment</title>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.22.1/full/pyodide.js"></script>
+<style>
+/* CSS Reset and Variables */
+:root {
+  --bg-color: #0b0c10;
+  --glass-bg: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --text-main: #c5c6c7;
+  --text-light: #ffffff;
+  --accent: #66fcf1;
+  --accent-dark: #45a29e;
+  --taskbar-bg: rgba(11, 12, 16, 0.85);
+  --window-bg: rgba(31, 40, 51, 0.85);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+body { overflow: hidden; height: 100vh; width: 100vw; background: radial-gradient(circle at top right, #1f2833, #0b0c10); color: var(--text-main); display: flex; flex-direction: column; }
+
+/* Desktop */
+#desktop { flex-grow: 1; position: relative; padding: 20px; display: flex; flex-direction: column; flex-wrap: wrap; align-content: flex-start; gap: 20px; }
+.icon { width: 90px; text-align: center; cursor: pointer; padding: 10px; border-radius: 8px; transition: all 0.2s ease; }
+.icon:hover { background: var(--glass-bg); transform: translateY(-2px); }
+.icon-emoji { font-size: 38px; margin-bottom: 8px; filter: drop-shadow(0 0 8px rgba(102, 252, 241, 0.3)); }
+.icon span { display: block; font-size: 13px; font-weight: 500; color: var(--text-light); text-shadow: 1px 1px 3px rgba(0,0,0,0.8); }
+
+/* Taskbar */
+#taskbar { height: 50px; background: var(--taskbar-bg); backdrop-filter: blur(15px); border-top: 1px solid var(--glass-border); display: flex; align-items: center; padding: 0 10px; z-index: 10000; box-shadow: 0 -5px 15px rgba(0,0,0,0.3); }
+#start-btn { width: 40px; height: 40px; border-radius: 8px; background: transparent; display: flex; justify-content: center; align-items: center; cursor: pointer; font-size: 22px; color: var(--accent); transition: background 0.2s; }
+#start-btn:hover { background: rgba(102, 252, 241, 0.1); }
+#open-apps { flex-grow: 1; display: flex; gap: 10px; margin-left: 20px; }
+.taskbar-app { padding: 5px 15px; background: var(--glass-bg); border-radius: 6px; cursor: pointer; border-bottom: 2px solid transparent; color: var(--text-light); font-size: 13px; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+.taskbar-app:hover { background: rgba(255,255,255,0.1); border-bottom: 2px solid var(--accent); }
+#clock { color: var(--text-light); font-size: 13px; font-weight: 500; padding-right: 15px; text-align: right;}
+
+/* Start Menu */
+#start-menu { position: absolute; bottom: 60px; left: 10px; width: 320px; background: rgba(20, 25, 30, 0.95); backdrop-filter: blur(20px); border: 1px solid var(--glass-border); border-radius: 12px; padding: 20px; display: none; z-index: 10001; flex-direction: column; gap: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); animation: slideUp 0.2s ease-out; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+.menu-user { display: flex; align-items: center; gap: 15px; border-bottom: 1px solid var(--glass-border); padding-bottom: 15px; }
+.menu-user-avatar { width: 45px; height: 45px; background: linear-gradient(135deg, var(--accent), var(--accent-dark)); border-radius: 50%; display: flex; justify-content: center; align-items: center; color: #0b0c10; font-weight: bold; font-size: 18px; box-shadow: 0 0 10px rgba(102, 252, 241, 0.4); }
+.menu-item { display: flex; align-items: center; gap: 15px; cursor: pointer; padding: 10px; border-radius: 8px; transition: background 0.2s; color: var(--text-light); font-weight: 500; }
+.menu-item:hover { background: var(--glass-bg); color: var(--accent); transform: translateX(5px); }
+
+/* Windows */
+.window { position: absolute; width: 650px; height: 450px; background: var(--window-bg); border: 1px solid var(--glass-border); border-radius: 10px; display: flex; flex-direction: column; box-shadow: 0 15px 40px rgba(0,0,0,0.6); overflow: hidden; resize: both; min-width: 350px; min-height: 250px; backdrop-filter: blur(20px); animation: popIn 0.2s ease-out;}
+@keyframes popIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+.title-bar { height: 38px; background: rgba(0,0,0,0.4); display: flex; justify-content: space-between; align-items: center; padding: 0 15px; cursor: grab; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.title-bar:active { cursor: grabbing; }
+.title-text { font-size: 13px; color: var(--text-light); font-weight: 600; display: flex; align-items: center; gap: 10px; letter-spacing: 0.5px;}
+.window-controls { display: flex; gap: 8px; }
+.win-btn { width: 14px; height: 14px; border-radius: 50%; cursor: pointer; transition: filter 0.2s; }
+.win-btn:hover { filter: brightness(1.2); }
+.close-btn { background: #ff5f56; box-shadow: 0 0 5px #ff5f56; }
+.max-btn { background: #ffbd2e; box-shadow: 0 0 5px #ffbd2e; }
+.min-btn { background: #27c93f; box-shadow: 0 0 5px #27c93f; }
+.content-area { flex-grow: 1; position: relative; overflow: auto; background: rgba(0,0,0,0.3); user-select: text; border-radius: 0 0 10px 10px; }
+
+/* --- App Specific Styles --- */
+
+/* Terminal */
+.terminal { background: #0c0c0c; color: #0f0; font-family: 'Consolas', 'Courier New', monospace; padding: 15px; height: 100%; overflow-y: auto; font-size: 14px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+.term-input-line { display: flex; margin-top: 5px; }
+.term-input { background: transparent; border: none; color: #0f0; font-family: inherit; flex-grow: 1; outline: none; font-size: 14px; }
+.term-output-line { margin: 2px 0; word-wrap: break-word; }
+.term-error { color: #ff5f56; }
+
+/* Code Editor */
+.code-editor { display: flex; height: 100%; flex-direction: column; }
+.editor-toolbar { background: rgba(0,0,0,0.5); padding: 8px 15px; display: flex; gap: 15px; align-items: center; border-bottom: 1px solid var(--glass-border); }
+.editor-toolbar button { background: var(--accent); color: #0b0c10; border: none; padding: 6px 18px; cursor: pointer; border-radius: 4px; font-weight: 600; transition: background 0.2s; }
+.editor-toolbar button:hover { background: #88fdf5; }
+.editor-main { display: flex; flex-grow: 1; }
+.editor-main textarea { width: 50%; background: #1e1e1e; color: #d4d4d4; font-family: 'Consolas', monospace; border: none; padding: 15px; outline: none; resize: none; font-size: 14px; line-height: 1.5; }
+.editor-main iframe { width: 50%; background: #ffffff; border: none; border-left: 1px solid #000; }
+
+/* File Manager */
+.file-manager { display: flex; height: 100%; flex-direction: column; background: rgba(10, 10, 15, 0.6); }
+.fm-nav { padding: 12px 15px; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--glass-border); display: flex; gap: 15px; align-items: center; }
+.fm-nav button { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; }
+.fm-nav button:hover { background: var(--accent); color: #000; }
+.fm-path { color: var(--text-main); font-family: monospace; font-size: 13px; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 4px; flex-grow: 1; }
+.file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1px)); gap: 20px; padding: 20px; }
+.file-item { text-align: center; cursor: pointer; padding: 15px 10px; border-radius: 8px; transition: all 0.2s; }
+.file-item:hover { background: rgba(255,255,255,0.08); transform: translateY(-2px); }
+.file-item svg { width: 45px; height: 45px; fill: var(--accent); drop-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+.file-item span { display: block; margin-top: 8px; font-size: 12px; word-break: break-word; color: #fff; }
+
+/* Paint */
+.paint-app { display: flex; flex-direction: column; height: 100%; background: #2b2b2b;}
+.paint-tools { background: rgba(0,0,0,0.6); padding: 10px 15px; display: flex; gap: 20px; border-bottom: 1px solid #111; align-items: center; color: #fff; font-size: 13px;}
+.paint-tools input[type="color"] { cursor: pointer; border: none; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; }
+.paint-tools input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.paint-tools input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
+.paint-tools input[type="range"] { cursor: pointer; accent-color: var(--accent); }
+.paint-tools button { background: #ff5f56; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.paint-canvas { flex-grow: 1; cursor: crosshair; touch-action: none; background: #ffffff; }
+
+/* Video Editor */
+.vid-editor { display: flex; flex-direction: column; height: 100%; background: #0a0a0a; padding: 15px; gap: 15px; }
+.vid-preview { flex-grow: 1; background: #000; display: flex; justify-content: center; align-items: center; overflow: hidden; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+.vid-preview video { max-width: 100%; max-height: 100%; transition: filter 0.1s; border-radius: 8px; }
+.vid-controls { background: #1a1a1a; padding: 20px; border-radius: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; border: 1px solid #333; }
+.filter-slider { display: flex; flex-direction: column; gap: 5px; color: #aaa; font-size: 12px; }
+.filter-slider label { font-weight: bold; color: #fff; display: flex; justify-content: space-between; }
+.filter-slider input { width: 100%; accent-color: var(--accent); }
+
+/* Snake Game */
+.snake-container { display: flex; justify-content: center; align-items: center; height: 100%; background: radial-gradient(circle, #2a2a35, #111); flex-direction: column; }
+canvas.snake-canvas { background: rgba(0,0,0,0.6); border: 2px solid var(--accent); border-radius: 8px; box-shadow: 0 0 30px rgba(102, 252, 241, 0.15); }
+.snake-hud { display: flex; justify-content: space-between; width: 400px; margin-bottom: 15px; color: #fff; font-family: 'Consolas', monospace; font-size: 18px; }
+.snake-score { color: var(--accent); font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div id="desktop">
+  </div>
+
+<div id="start-menu">
+  <div class="menu-user">
+    <div class="menu-user-avatar">AY</div>
+    <div>
+      <div style="color: var(--text-light); font-weight: bold; font-size: 16px;">Altay Y.</div>
+      <div style="font-size: 12px; color: var(--accent);">Mathematical Engineering</div>
+    </div>
+  </div>
+  <div id="menu-items-container">
+    </div>
+</div>
+
+<div id="taskbar">
+  <div id="start-btn">⊞</div>
+  <div id="open-apps"></div>
+  <div id="clock">
+    <div id="time" style="font-weight: bold;"></div>
+    <div id="date" style="font-size: 10px; color: var(--accent-dark);"></div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// CORE STATE & CONFIGURATION
+// ==========================================
+let zIndexCounter = 100;
+let pyodideInstance = null;
+const windows = {}; 
+
+// Personalized simulated file system
+const fileSystem = {
+  'University': [
+    { name: 'Data_Mining_Final.pdf', type: 'file' },
+    { name: 'GameTheory_CheatSheet.txt', type: 'file' },
+    { name: 'MachineLearning_101.ipynb', type: 'file' }
+  ],
+  'Projects': [
+    { name: 'Altay_AI_Twin', type: 'folder' },
+    { name: 'FuzzyLogic_OHS.pdf', type: 'file' }
+  ],
+  'Games': [
+    { name: 'Elden_Ring_Build.txt', type: 'file' },
+    { name: 'Car_Simulators.url', type: 'file' }
+  ],
+  'Music': [
+    { name: 'Sad_Turkish_Rap_Playlist.mp3', type: 'file' }
+  ]
+};
+
+const apps = [
+  { id: 'terminal', name: 'Python Terminal', icon: '💻', run: openTerminal },
+  { id: 'editor', name: 'Code Editor', icon: '📝', run: openCodeEditor },
+  { id: 'files', name: 'File Explorer', icon: '📁', run: openFileManager },
+  { id: 'paint', name: 'Digital Paint', icon: '🎨', run: openPaint },
+  { id: 'video', name: 'Video Editor', icon: '🎬', run: openVideoEditor },
+  { id: 'snake', name: 'Snake Game', icon: '🐍', run: openSnakeGame }
+];
+
+// SVG Assets
+const folderSvg = `<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`;
+const fileSvg = `<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>`;
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+async function initOS() {
+  updateClock();
+  setInterval(updateClock, 1000);
+  
+  const desktop = document.getElementById('desktop');
+  const menuContainer = document.getElementById('menu-items-container');
+
+  apps.forEach(app => {
+    // Desktop Icon
+    const div = document.createElement('div');
+    div.className = 'icon';
+    div.innerHTML = `<div class="icon-emoji">${app.icon}</div><span>${app.name}</span>`;
+    div.ondblclick = app.run;
+    desktop.appendChild(div);
+
+    // Start Menu Item
+    const item = document.createElement('div');
+    item.className = 'menu-item';
+    item.innerHTML = `<span style="font-size:22px">${app.icon}</span> ${app.name}`;
+    item.onclick = () => { app.run(); toggleStartMenu(); };
+    menuContainer.appendChild(item);
+  });
+
+  // Background Pyodide Loading
+  try {
+    pyodideInstance = await loadPyodide();
+    console.log("AltayOS: Pyodide loaded successfully.");
+  } catch (e) {
+    console.error("AltayOS: Pyodide load failed.", e);
+  }
+}
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('time').innerText = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  document.getElementById('date').innerText = now.toLocaleDateString();
+}
+
+// Start Menu Toggle
+const startBtn = document.getElementById('start-btn');
+const startMenu = document.getElementById('start-menu');
+startBtn.onclick = toggleStartMenu;
+
+function toggleStartMenu() {
+  startMenu.style.display = startMenu.style.display === 'flex' ? 'none' : 'flex';
+}
+document.addEventListener('click', (e) => {
+  if (!startMenu.contains(e.target) && e.target !== startBtn) {
+    startMenu.style.display = 'none';
+  }
+});
+
+// ==========================================
+// WINDOW MANAGEMENT SYSTEM
+// ==========================================
+function createWindow(appId, title, icon, contentHTML) {
+  if (windows[appId]) {
+    bringToFront(windows[appId].element);
+    return null; // App is already open
+  }
+
+  const win = document.createElement('div');
+  win.className = 'window';
+  win.style.zIndex = ++zIndexCounter;
+  
+  // Random cascading position
+  const offset = Object.keys(windows).length * 30;
+  win.style.top = (80 + offset) + 'px';
+  win.style.left = (150 + offset) + 'px';
+  
+  win.innerHTML = `
+    <div class="title-bar">
+      <div class="title-text"><span>${icon}</span> ${title}</div>
+      <div class="window-controls">
+        <div class="win-btn min-btn" title="Minimize"></div>
+        <div class="win-btn max-btn" title="Maximize"></div>
+        <div class="win-btn close-btn" title="Close"></div>
+      </div>
+    </div>
+    <div class="content-area">${contentHTML}</div>
+  `;
+
+  document.body.appendChild(win);
+  const contentArea = win.querySelector('.content-area');
+  
+  windows[appId] = { element: win, contentArea: contentArea, maximized: false };
+
+  // Taskbar Integration
+  const tbIcon = document.createElement('div');
+  tbIcon.className = 'taskbar-app';
+  tbIcon.innerHTML = `<span>${icon}</span> ${title}`;
+  tbIcon.onclick = () => bringToFront(win);
+  document.getElementById('open-apps').appendChild(tbIcon);
+
+  // Window Controls Events
+  win.querySelector('.close-btn').onclick = () => {
+    win.remove();
+    tbIcon.remove();
+    delete windows[appId];
+  };
+  
+  win.querySelector('.max-btn').onclick = () => {
+    if (!windows[appId].maximized) {
+      windows[appId].prevRect = { top: win.style.top, left: win.style.left, width: win.style.width, height: win.style.height };
+      win.style.top = '0'; win.style.left = '0';
+      win.style.width = '100vw'; win.style.height = 'calc(100vh - 50px)';
+      win.style.borderRadius = '0';
+      windows[appId].maximized = true;
+    } else {
+      const rect = windows[appId].prevRect;
+      win.style.top = rect.top; win.style.left = rect.left;
+      win.style.width = rect.width; win.style.height = rect.height;
+      win.style.borderRadius = '10px';
+      windows[appId].maximized = false;
+    }
+  };
+  
+  // Dragging Implementation
+  const titleBar = win.querySelector('.title-bar');
+  let isDragging = false, offsetX, offsetY;
+  
+  titleBar.onmousedown = (e) => {
+    if (e.target.classList.contains('win-btn')) return;
+    isDragging = true;
+    bringToFront(win);
+    const rect = win.getBoundingClientRect();
+    offsetX = e.clientX - rect.left;
+    offsetY = e.clientY - rect.top;
+  };
+  
+  document.addEventListener('mousemove', (e) => {
+    if (isDragging && !windows[appId].maximized) {
+      win.style.left = (e.clientX - offsetX) + 'px';
+      win.style.top = (e.clientY - offsetY) + 'px';
+    }
+  });
+  
+  document.addEventListener('mouseup', () => { isDragging = false; });
+  win.onmousedown = () => bringToFront(win);
+
+  return contentArea;
+}
+
+function bringToFront(win) {
+  win.style.zIndex = ++zIndexCounter;
+}
+
+// ==========================================
+// APPLICATION LOGIC
+// ==========================================
+
+// 1. Python Terminal
+function openTerminal() {
+  const content = createWindow('terminal', 'Python Terminal', '💻', `
+    <div class="terminal" id="term-container">
+      <div style="color:var(--accent); font-weight:bold;">AltayOS Python 3.10 Environment</div>
+      <div style="color:#888; font-size:12px; margin-bottom:10px;">Powered by Pyodide (WebAssembly). Type 'help()' for more info.</div>
+      <div id="term-output"></div>
+      <div class="term-input-line">
+        <span style="color:var(--accent);">>>>&nbsp;</span>
+        <input type="text" class="term-input" id="term-input" autocomplete="off" disabled placeholder="Loading Pyodide runtime...">
+      </div>
+    </div>
+  `);
+  
+  if (!content) return; 
+
+  const input = content.querySelector('#term-input');
+  const output = content.querySelector('#term-output');
+  const container = content.querySelector('#term-container');
+  
+  const checkPyodide = setInterval(() => {
+    if (pyodideInstance) {
+      clearInterval(checkPyodide);
+      input.disabled = false;
+      input.placeholder = "Enter Python code here...";
+      input.focus();
+    }
+  }, 500);
+
+  input.addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      const code = input.value;
+      input.value = '';
+      output.innerHTML += `<div class="term-output-line"><span style="color:var(--accent);">>>></span> ${code}</div>`;
+      
+      if (!code.trim()) return;
+      
+      if (pyodideInstance) {
+        try {
+          // Capture stdout
+          pyodideInstance.runPython(`
+            import sys, io
+            sys.stdout = io.StringIO()
+          `);
+          let result = await pyodideInstance.runPythonAsync(code);
+          let stdout = pyodideInstance.runPython("sys.stdout.getvalue()");
+          
+          if (stdout) output.innerHTML += `<div class="term-output-line">${stdout.replace(/\\n/g, '<br>')}</div>`;
+          if (result !== undefined) output.innerHTML += `<div class="term-output-line" style="color:#d4d4d4">${result}</div>`;
+        } catch (err) {
+          const errorMsg = err.message.split('\\n').slice(-2).join('<br>');
+          output.innerHTML += `<div class="term-output-line term-error">${errorMsg}</div>`;
+        }
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+  });
+}
+
+// 2. Code Editor
+function openCodeEditor() {
+  const content = createWindow('editor', 'Code Editor', '📝', `
+    <div class="code-editor">
+      <div class="editor-toolbar">
+        <button id="run-code">▶ Run Render</button>
+        <span style="color:#aaa; font-size:12px;">Live HTML/CSS/JS Playground</span>
+      </div>
+      <div class="editor-main">
+        <textarea id="code-input" spellcheck="false">
+&lt;style&gt;
+  body { 
+    background: #222; color: #fff; 
+    font-family: sans-serif; 
+    display: flex; justify-content: center; 
+    align-items: center; height: 100vh; margin: 0;
+  }
+  .box {
+    padding: 20px 40px; border-radius: 8px;
+    background: linear-gradient(45deg, #66fcf1, #45a29e);
+    color: #0b0c10; font-weight: bold; font-size: 24px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    transform: rotate(-5deg);
+  }
+&lt;/style&gt;
+
+&lt;div class="box"&gt;
+  Machine Learning Protocol Active...
+&lt;/div&gt;
+
+&lt;script&gt;
+  console.log("AltayOS Engine Running");
+&lt;/script&gt;
+        </textarea>
+        <iframe id="code-output"></iframe>
+      </div>
+    </div>
+  `);
+  
+  if (!content) return;
+
+  const runBtn = content.querySelector('#run-code');
+  const input = content.querySelector('#code-input');
+  const iframe = content.querySelector('#code-output');
+
+  const renderCode = () => {
+    const blob = new Blob([input.value], { type: 'text/html' });
+    iframe.src = URL.createObjectURL(blob);
+  };
+  
+  runBtn.onclick = renderCode;
+  renderCode(); // Initial render
+}
+
+// 3. File Explorer
+function openFileManager() {
+  const content = createWindow('files', 'File Explorer', '📁', `
+    <div class="file-manager">
+      <div class="fm-nav">
+        <button id="fm-back">⬅ Up</button>
+        <div class="fm-path" id="fm-path">C:\\Users\\Altay</div>
+      </div>
+      <div class="content-area">
+        <div class="file-grid" id="fm-grid"></div>
+      </div>
+    </div>
+  `);
+  
+  if (!content) return;
+
+  const grid = content.querySelector('#fm-grid');
+  const pathLabel = content.querySelector('#fm-path');
+  const backBtn = content.querySelector('#fm-back');
+  
+  let currentPath = 'root';
+
+  function renderFiles(path) {
+    grid.innerHTML = '';
+    if (path === 'root') {
+      pathLabel.innerText = 'C:\\Users\\Altay';
+      Object.keys(fileSystem).forEach(folder => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        item.innerHTML = `${folderSvg}<span>${folder}</span>`;
+        item.onclick = () => { currentPath = folder; renderFiles(folder); };
+        grid.appendChild(item);
+      });
+    } else {
+      pathLabel.innerText = 'C:\\Users\\Altay\\' + path;
+      const files = fileSystem[path] || [];
+      if(files.length === 0) grid.innerHTML = '<div style="color:#888; grid-column: 1/-1;">Folder is empty.</div>';
+      
+      files.forEach(f => {
+        const item = document.createElement('div');
+        item.className = 'file-item';
+        const icon = f.type === 'folder' ? folderSvg : fileSvg;
+        item.innerHTML = `${icon}<span>${f.name}</span>`;
+        item.onclick = () => {
+          if(f.type === 'folder') alert('Navigating deeper is simulated.');
+          else alert(`Opening file: ${f.name}\\n(File reading mocked in this environment)`);
+        };
+        grid.appendChild(item);
+      });
+    }
+  }
+
+  backBtn.onclick = () => { if(currentPath !== 'root') { currentPath = 'root'; renderFiles('root'); } };
+  renderFiles('root');
+}
+
+// 4. Digital Paint
+function openPaint() {
+  const content = createWindow('paint', 'Digital Paint', '🎨', `
+    <div class="paint-app">
+      <div class="paint-tools">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label>Color:</label>
+          <input type="color" id="paint-color" value="#66fcf1">
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label>Brush Size:</label>
+          <input type="range" id="paint-size" min="1" max="50" value="5">
+        </div>
+        <button id="paint-clear">Clear Canvas</button>
+      </div>
+      <canvas class="paint-canvas" id="paint-canvas"></canvas>
+    </div>
+  `);
+  
+  if (!content) return;
+
+  const canvas = content.querySelector('#paint-canvas');
+  const ctx = canvas.getContext('2d');
+  const colorPicker = content.querySelector('#paint-color');
+  const sizePicker = content.querySelector('#paint-size');
+  const clearBtn = content.querySelector('#paint-clear');
+
+  // Delay resize to allow DOM to render window sizes
+  setTimeout(() => {
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight - 46; // minus toolbar
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }, 100);
+
+  let painting = false;
+
+  function startPosition(e) { painting = true; draw(e); }
+  function endPosition() { painting = false; ctx.beginPath(); }
+  function draw(e) {
+    if (!painting) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    ctx.lineWidth = sizePicker.value;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = colorPicker.value;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  canvas.addEventListener('mousedown', startPosition);
+  canvas.addEventListener('mouseup', endPosition);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseleave', endPosition);
+  
+  clearBtn.onclick = () => {
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+}
+
+// 5. Video Editor (Mock Color Grading)
+function openVideoEditor() {
+  const content = createWindow('video', 'Video Editor', '🎬', `
+    <div class="vid-editor">
+      <div class="vid-preview">
+        <video id="vid-player" src="https://www.w3schools.com/html/mov_bbb.mp4" controls crossorigin="anonymous" loop></video>
+      </div>
+      <div class="vid-controls">
+        <div class="filter-slider">
+          <label>Brightness <span id="val-bright">100%</span></label>
+          <input type="range" id="vid-brightness" min="0" max="200" value="100">
+        </div>
+        <div class="filter-slider">
+          <label>Contrast <span id="val-cont">100%</span></label>
+          <input type="range" id="vid-contrast" min="0" max="200" value="100">
+        </div>
+        <div class="filter-slider">
+          <label>Grayscale <span id="val-gray">0%</span></label>
+          <input type="range" id="vid-gray" min="0" max="100" value="0">
+        </div>
+        <div class="filter-slider">
+          <label>Hue Rotate <span id="val-hue">0deg</span></label>
+          <input type="range" id="vid-hue" min="0" max="360" value="0">
+        </div>
+      </div>
+    </div>
+  `);
+  
+  if (!content) return;
+
+  const vid = content.querySelector('#vid-player');
+  const inputs = {
+    bright: content.querySelector('#vid-brightness'),
+    cont: content.querySelector('#vid-contrast'),
+    gray: content.querySelector('#vid-gray'),
+    hue: content.querySelector('#vid-hue')
+  };
+  const labels = {
+    bright: content.querySelector('#val-bright'),
+    cont: content.querySelector('#val-cont'),
+    gray: content.querySelector('#val-gray'),
+    hue: content.querySelector('#val-hue')
+  };
+
+  function updateFilters() {
+    vid.style.filter = `brightness(${inputs.bright.value}%) contrast(${inputs.cont.value}%) grayscale(${inputs.gray.value}%) hue-rotate(${inputs.hue.value}deg)`;
+    labels.bright.innerText = inputs.bright.value + '%';
+    labels.cont.innerText = inputs.cont.value + '%';
+    labels.gray.innerText = inputs.gray.value + '%';
+    labels.hue.innerText = inputs.hue.value + 'deg';
+  }
+
+  Object.values(inputs).forEach(input => input.addEventListener('input', updateFilters));
+}
+
+// 6. Snake Game
+function openSnakeGame() {
+  const content = createWindow('snake', 'Snake Game', '🐍', `
+    <div class="snake-container">
+      <div class="snake-hud">
+        <div>SCORE: <span id="snake-score-val" class="snake-score">0</span></div>
+        <div style="font-size:12px; color:#aaa; margin-top:5px;">[W A S D] or Arrows to move</div>
+      </div>
+      <canvas class="snake-canvas" id="snake-canvas" width="450" height="300"></canvas>
+    </div>
+  `);
+  
+  if (!content) return;
+
+  const canvas = content.querySelector('#snake-canvas');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = content.querySelector('#snake-score-val');
+  
+  const gridSize = 15;
+  let snake = [{x: 225, y: 150}];
+  let dx = 15; let dy = 0;
+  let food = {x: 105, y: 105};
+  let score = 0;
+  let gameLoop;
+  let gameActive = false;
+
+  function randomGrid(min, max) { 
+    return Math.round((Math.random() * (max-min) + min) / gridSize) * gridSize; 
+  }
+  
+  function genFood() {
+    food.x = randomGrid(0, canvas.width - gridSize);
+    food.y = randomGrid(0, canvas.height - gridSize);
+  }
+
+  function draw() {
+    if(!gameActive) return;
+    setTimeout(() => {
+      gameLoop = requestAnimationFrame(draw);
+      
+      const head = {x: snake[0].x + dx, y: snake[0].y + dy};
+      
+      // Wall collision (wrap around)
+      if (head.x < 0) head.x = canvas.width - gridSize;
+      if (head.x >= canvas.width) head.x = 0;
+      if (head.y < 0) head.y = canvas.height - gridSize;
+      if (head.y >= canvas.height) head.y = 0;
+
+      // Self collision
+      for (let i = 0; i < snake.length; i++) {
+        if (head.x === snake[i].x && head.y === snake[i].y && (dx !== 0 || dy !== 0)) {
+          gameActive = false;
+          ctx.fillStyle = 'rgba(0,0,0,0.7)';
+          ctx.fillRect(0,0, canvas.width, canvas.height);
+          ctx.fillStyle = '#ff5f56';
+          ctx.font = '24px Consolas';
+          ctx.textAlign = 'center';
+          ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2);
+          ctx.font = '14px Consolas';
+          ctx.fillStyle = '#fff';
+          ctx.fillText('Close and reopen to play again', canvas.width/2, canvas.height/2 + 30);
+          return;
+        }
+      }
+
+      snake.unshift(head);
+
+      if (head.x === food.x && head.y === food.y) {
+        score += 10;
+        scoreEl.innerText = score;
+        genFood();
+      } else {
+        snake.pop();
+      }
+
+      // Draw background
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw Food
+      ctx.fillStyle = '#ffbd2e';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ffbd2e';
+      ctx.fillRect(food.x, food.y, gridSize, gridSize);
+      ctx.shadowBlur = 0; // reset
+      
+      // Draw Snake
+      snake.forEach((part, index) => {
+        ctx.fillStyle = index === 0 ? 'var(--accent)' : 'var(--accent-dark)';
+        ctx.fillRect(part.x, part.y, gridSize - 1, gridSize - 1);
+      });
+      
+    }, 80); // Speed
+  }
+
+  content.addEventListener('keydown', (e) => {
+    const key = e.key.toLowerCase();
+    if ((key === 'arrowleft' || key === 'a') && dx === 0) { dx = -gridSize; dy = 0; }
+    if ((key === 'arrowup' || key === 'w') && dy === 0) { dx = 0; dy = -gridSize; }
+    if ((key === 'arrowright' || key === 'd') && dx === 0) { dx = gridSize; dy = 0; }
+    if ((key === 'arrowdown' || key === 's') && dy === 0) { dx = 0; dy = gridSize; }
+  });
+  
+  // Container focus for keyboard events
+  content.tabIndex = 0;
+  content.focus();
+  content.style.outline = 'none';
+  
+  genFood();
+  gameActive = true;
+  draw();
+  
+  // Cleanup loop when window closes
+  windows['snake'].element.querySelector('.close-btn').addEventListener('click', () => {
+    gameActive = false;
+    cancelAnimationFrame(gameLoop);
+  });
+}
+
+// Boot System
+initOS();
+</script>
+</body>
+</html>
